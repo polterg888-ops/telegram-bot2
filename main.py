@@ -99,8 +99,9 @@ def main():
         if check_monthly_restart():
             return
         
-        # Инициализируем базу данных
+        # Инициализируем базу данных - импорт внутри функции
         logger.info("Инициализация базы данных...")
+        from database import init_db
         init_db()
         logger.info("База данных готова")
         
@@ -187,4 +188,5 @@ if __name__ == '__main__':
         time.sleep(5)
         
         # Пробуем перезапуститься
+
         os.execv(sys.executable, ['python'] + sys.argv)
