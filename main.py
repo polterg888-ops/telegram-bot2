@@ -1,7 +1,17 @@
-# main.py - СОВМЕСТИМЫЙ С ВЕРСИЕЙ 13.15
+# main.py - РАБОЧАЯ ВЕРСИЯ
 import os
 import sys
 import logging
+
+# Добавим заглушку для imghdr если его нет
+try:
+    import imghdr
+except ImportError:
+    # Создаем заглушку для Python 3.13+
+    class ImghdrStub:
+        def what(self, *args, **kwargs):
+            return None
+    sys.modules['imghdr'] = ImghdrStub()
 
 # Настройка логирования
 logging.basicConfig(
@@ -41,34 +51,41 @@ def main():
             logger.error(f"❌ Ошибка базы данных: {e}")
             return
         
-        # 3. Импорт обработчиков
+        # 3. Создание приложения (версия 20.7)
         try:
-            from bot.handlers import start, admin_command, contact_handler, button_handler, text_handler
-            logger.info("✅ Обработчики загружены")
-        except ImportError as e:
-            logger.error(f"❌ Ошибка загрузки обработчиков: {e}")
-            logger.error("Проверьте структуру папки bot/")
+            from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+            
+            app = Application.builder().token(BOT_TOKEN).build()
+            logger.info("✅ Приложение бота создано")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания приложения: {e}")
             return
         
-        # 4. Создание бота (версия 13.15)
+        # 4. Импорт и добавление обработчиков
         try:
-            from telegram import Updater
-            from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+            # Импортируем обработчики ПОСЛЕ создания приложения
+            from bot.handlers import start, admin_command, contact_handler, button_handler, text_handler, set_application
             
-            updater = Updater(token=BOT_TOKEN, use_context=True)
-            dp = updater.dispatcher
+            # Передаем приложение для уведомлений
+            set_application(app)
             
             # Добавление обработчиков
-            dp.add_handler(CommandHandler("start", start))
-            dp.add_handler(CommandHandler("admin", admin_command))
-            dp.add_handler(MessageHandler(Filters.contact, contact_handler))
-            dp.add_handler(MessageHandler(Filters.text & Filters.private, text_handler))
-            dp.add_handler(CallbackQueryHandler(button_handler))
+            app.add_handler(CommandHandler("start", start))
+            app.add_handler(CommandHandler("admin", admin_command))
+            app.add_handler(MessageHandler(filters.CONTACT, contact_handler))
+            app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, text_handler))
+            app.add_handler(CallbackQueryHandler(button_handler))
             
             logger.info("✅ Обработчики добавлены")
             
-        except Exception as e:
-            logger.error(f"❌ Ошибка создания бота: {e}")
+        except ImportError as e:
+            logger.error(f"❌ Ошибка импорта обработчиков: {e}")
+            logger.error("Проверьте файлы в папке bot/:")
+            logger.error("1. __init__.py (пустой файл)")
+            logger.error("2. handlers.py")
+            logger.error("3. admin_keyboards.py")
+            logger.error("4. user_keyboards.py")
             return
         
         # 5. Запуск бота
@@ -76,8 +93,10 @@ def main():
         logger.info("🤖 БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ!")
         logger.info("=" * 60)
         
-        updater.start_polling()
-        updater.idle()
+        app.run_polling(
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query"]
+        )
         
     except Exception as e:
         logger.error(f"💥 КРИТИЧЕСКАЯ ОШИБКА: {e}", exc_info=True)
