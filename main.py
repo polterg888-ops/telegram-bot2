@@ -1,77 +1,86 @@
-# main.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# main.py - СОВМЕСТИМЫЙ С ВЕРСИЕЙ 13.15
 import os
 import sys
 import logging
 
+# Настройка логирования
 logging.basicConfig(
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
-
 logger = logging.getLogger(__name__)
 
 def main():
-    print("=" * 60)
-    print("🚀 ЗАПУСК ТЕЛЕГРАМ БОТА")
-    print("=" * 60)
-    
-    # Сначала импортируем config чтобы проверить токен
+    """Основная функция запуска"""
     try:
-        from config import BOT_TOKEN, ADMINS
-        logger.info(f"Токен: {'установлен' if BOT_TOKEN else 'НЕТ'}")
-        logger.info(f"Админы: {ADMINS}")
-    except ImportError as e:
-        logger.error(f"Ошибка импорта config: {e}")
-        return
-    
-    # Инициализация БД
-    try:
-        from database import init_db
-        init_db()
-        logger.info("✅ База данных инициализирована")
-    except Exception as e:
-        logger.error(f"❌ Ошибка БД: {e}")
-        return
-    
-    # Импорт обработчиков
-    try:
-        from bot.handlers import (
-            start, contact_handler, button_handler, 
-            admin_command, text_handler, set_application
-        )
-        logger.info("✅ Модули бота загружены")
-    except ImportError as e:
-        logger.error(f"❌ Ошибка импорта модулей бота: {e}")
-        logger.error("Проверьте что в папке bot/ есть:")
-        logger.error("- __init__.py (пустой файл)")
-        logger.error("- handlers.py")
-        logger.error("- admin_keyboards.py")
-        logger.error("- user_keyboards.py")
-        return
-    
-    # Создание приложения
-    try:
-        from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+        print("=" * 60)
+        print("🚀 ЗАПУСК ТЕЛЕГРАМ БОТА ДЛЯ БАРБЕРШОПА")
+        print("=" * 60)
         
-        app = Application.builder().token(BOT_TOKEN).build()
-        set_application(app)
+        # 1. Проверка конфига
+        try:
+            from config import BOT_TOKEN, ADMINS
+            logger.info(f"✅ Токен: {'установлен' if BOT_TOKEN else 'НЕТ!'}")
+            logger.info(f"✅ Админы: {ADMINS}")
+            
+            if not BOT_TOKEN:
+                logger.error("❌ BOT_TOKEN не установлен!")
+                return
+                
+        except ImportError as e:
+            logger.error(f"❌ Ошибка загрузки config.py: {e}")
+            return
         
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("admin", admin_command))
-        app.add_handler(MessageHandler(filters.CONTACT, contact_handler))
-        app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, text_handler))
-        app.add_handler(CallbackQueryHandler(button_handler))
+        # 2. Инициализация базы данных
+        try:
+            from database import init_db
+            init_db()
+            logger.info("✅ База данных инициализирована")
+        except Exception as e:
+            logger.error(f"❌ Ошибка базы данных: {e}")
+            return
         
-        logger.info("✅ Бот запущен и готов к работе!")
+        # 3. Импорт обработчиков
+        try:
+            from bot.handlers import start, admin_command, contact_handler, button_handler, text_handler
+            logger.info("✅ Обработчики загружены")
+        except ImportError as e:
+            logger.error(f"❌ Ошибка загрузки обработчиков: {e}")
+            logger.error("Проверьте структуру папки bot/")
+            return
+        
+        # 4. Создание бота (версия 13.15)
+        try:
+            from telegram import Updater
+            from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+            
+            updater = Updater(token=BOT_TOKEN, use_context=True)
+            dp = updater.dispatcher
+            
+            # Добавление обработчиков
+            dp.add_handler(CommandHandler("start", start))
+            dp.add_handler(CommandHandler("admin", admin_command))
+            dp.add_handler(MessageHandler(Filters.contact, contact_handler))
+            dp.add_handler(MessageHandler(Filters.text & Filters.private, text_handler))
+            dp.add_handler(CallbackQueryHandler(button_handler))
+            
+            logger.info("✅ Обработчики добавлены")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания бота: {e}")
+            return
+        
+        # 5. Запуск бота
+        logger.info("=" * 60)
+        logger.info("🤖 БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ!")
         logger.info("=" * 60)
         
-        app.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=["message", "callback_query"]
-        )
+        updater.start_polling()
+        updater.idle()
         
     except Exception as e:
-        logger.error(f"❌ Критическая ошибка: {e}", exc_info=True)
+        logger.error(f"💥 КРИТИЧЕСКАЯ ОШИБКА: {e}", exc_info=True)
         sys.exit(1)
 
 if __name__ == '__main__':
